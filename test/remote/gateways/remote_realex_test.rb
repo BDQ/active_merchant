@@ -8,20 +8,105 @@ class RemoteRealexTest < Test::Unit::TestCase
     @gateway_with_account = RealexGateway.new(fixtures(:realex_with_account))
   
     # Replace the card numbers with the test account numbers from Realex
-    @visa            = fixtures(:realex_visa)
-    @visa_declined   = fixtures(:realex_visa_declined)
-    @visa_referral_b = fixtures(:realex_visa_referral_b)
-    @visa_referral_a = fixtures(:realex_visa_referral_a)
-    @visa_coms_error = fixtures(:realex_visa_coms_error)
+    @visa            = credit_card('your-test-creditcard-no-here')
+    @visa_declined   = credit_card('your-test-creditcard-no-here')
+    @visa_referral_b = credit_card('your-test-creditcard-no-here')
+    @visa_referral_a = credit_card('your-test-creditcard-no-here')
+    @visa_coms_error = credit_card('your-test-creditcard-no-here')
     
-    @mastercard            = fixtures(:realex_mastercard)
-    @mastercard_declined   = fixtures(:realex_mastercard_declined)
-    @mastercard_referral_b = fixtures(:realex_mastercard_referral_b)
-    @mastercard_referral_a = fixtures(:realex_mastercard_referral_a)
-    @mastercard_coms_error = fixtures(:realex_mastercard_coms_error)
+    @mastercard            = credit_card('your-test-creditcard-no-here', {:type => 'master'})
+    @mastercard_declined   = credit_card('your-test-creditcard-no-here', {:type => 'master'})
+    @mastercard_referral_b = credit_card('your-test-creditcard-no-here', {:type => 'master'})
+    @mastercard_referral_a = credit_card('your-test-creditcard-no-here', {:type => 'master'})
+    @mastercard_coms_error = credit_card('your-test-creditcard-no-here', {:type => 'master'})
     
     @amount = 10000
   end
+  
+  def test_realex_authorize
+    [ @visa, @mastercard ].each do |card|
+
+      response = @gateway.authorize(@amount, card, 
+        :order_id => generate_unique_id,
+        :description => 'Test Realex authorize',
+        :billing_address => {
+          :zip => '90210',
+          :country => 'US'
+        }
+      )
+      assert_not_nil response
+      assert_success response
+      assert response.test?
+      assert response.authorization.length > 0
+      assert_equal 'Successful', response.message
+    end      
+  end
+  
+  def test_realex_authorize_and_capture
+    [ @visa, @mastercard ].each do |card|
+
+      auth_response = @gateway.authorize(@amount, card, 
+        :order_id => generate_unique_id,
+        :description => 'Test Realex authorize',
+        :billing_address => {
+          :zip => '90210',
+          :country => 'US'
+        }
+      )
+ 
+      assert_not_nil auth_response
+      assert_success auth_response
+      assert auth_response.test?
+      assert auth_response.authorization.length > 0
+      assert_equal 'Successful', auth_response.message
+    
+      capt_response = @gateway.capture(@amount, auth_response.authorization,
+        :order_id => auth_response.params['orderid'],
+        :pasref => auth_response.params['pasref'],
+        :description => 'Test Realex capture'
+      )
+
+      assert_not_nil capt_response
+      assert_success capt_response
+      assert capt_response.test?
+      assert_equal 'Successful', capt_response.message
+      
+    end      
+  end
+  
+  
+  def test_realex_authorize_and_void
+    [ @visa, @mastercard ].each do |card|
+
+      auth_response = @gateway.authorize(@amount, card, 
+        :order_id => generate_unique_id,
+        :description => 'Test Realex authorize',
+        :billing_address => {
+          :zip => '90210',
+          :country => 'US'
+        }
+      )
+ 
+      assert_not_nil auth_response
+      assert_success auth_response
+      assert auth_response.test?
+      assert auth_response.authorization.length > 0
+      assert_equal 'Successful', auth_response.message
+    
+      void_response = @gateway.void(auth_response.authorization,
+        :order_id => auth_response.params['orderid'],
+        :pasref => auth_response.params['pasref'],
+        :description => 'Test Realex void'
+      )
+
+      assert_not_nil void_response
+      assert_success void_response
+      assert void_response.test?
+      assert_equal 'Successful', void_response.message
+      
+    end      
+  end
+  
   
   def test_realex_purchase
     [ @visa, @mastercard ].each do |card|

@@ -47,6 +47,13 @@ module ActiveMerchant
         @options = options
         super
       end  
+      
+      def authorize(money, credit_card, options = {})
+        requires!(options, :order_id)
+        
+        request = build_purchase_or_authorization_request(:authorization, money, credit_card, options) 
+        commit(request)
+      end
   
       def purchase(money, credit_card, options = {})
         requires!(options, :order_id)
@@ -54,6 +61,28 @@ module ActiveMerchant
         request = build_purchase_or_authorization_request(:purchase, money, credit_card, options) 
         commit(request)
       end     
+      
+      def capture(money, authorization, options = {})
+        requires!(options, :order_id, :pasref) 
+        options.update(
+          :authcode => authorization
+        )
+        
+        request = build_void_or_settle_request(:settle, money, options) 
+        commit(request)
+      end
+      
+      # Void a previous transaction
+      def void(authorization, options = {})
+        requires!(options, :order_id, :pasref)
+        options.update(
+          :authcode => authorization
+        )
+        
+        request = build_void_or_settle_request(:void, nil, options) 
+        commit(request)
+      end
+
       
       private           
       def commit(request)        
@@ -143,6 +172,32 @@ module ActiveMerchant
             xml.tag! 'prodid', options[:invoice]
             xml.tag! 'varref'
           end
+        end
+
+        xml.target!
+      end
+      
+      def build_void_or_settle_request(action, money, options)
+        timestamp = Time.now.strftime('%Y%m%d%H%M%S')
+        
+        xml = Builder::XmlMarkup.new :indent => 2
+        xml.tag! 'request', 'timestamp' => timestamp, 'type' => action do
+      
+          xml.tag! 'merchantid', @options[:login] 
+          xml.tag! 'account', @options[:account]
+      
+          xml.tag! 'orderid', sanitize_order_id(options[:order_id])
+          xml.tag! 'amount', amount(money), 'currency' => options[:currency] || currency(money)
+                    
+          xml.tag! 'pasref', options[:pasref]
+          xml.tag! 'authcode', options[:authcode]
+          
+          xml.tag! 'sha1hash', sha1from("#{timestamp}.#{@options[:login]}.#{sanitize_order_id(options[:order_id])}.#{amount(money)}.#{options[:currency] || currency(money)}.")
+          xml.tag! 'comments' do
+            xml.tag! 'comment', options[:description], 'id' => 1 
+            xml.tag! 'comment', 'id' => 2
+          end
+          
         end
 
         xml.target!
